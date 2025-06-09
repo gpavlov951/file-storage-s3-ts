@@ -1,4 +1,5 @@
 import type { BunRequest } from "bun";
+import path from "path";
 import { getBearerToken, validateJWT } from "../auth";
 import type { ApiConfig } from "../config";
 import { getVideo, updateVideo, type Video } from "../db/videos";
@@ -66,11 +67,14 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   }
 
   const type = thumbnail.type;
-  const data = await thumbnail.arrayBuffer();
-  const buffer = Buffer.from(data);
-  const base64Data = buffer.toString("base64");
+  const fileExtension = getFileExtensionFromMimeType(type);
+  const fileName = `${videoId}.${fileExtension}`;
+  const filePath = path.join(cfg.assetsRoot, fileName);
 
-  const thumbnailURL = `data:${type};base64,${base64Data}`;
+  const data = await thumbnail.arrayBuffer();
+  await Bun.write(filePath, data);
+
+  const thumbnailURL = `http://localhost:${cfg.port}/assets/${fileName}`;
 
   const updatedVideo: Video = {
     ...video,
@@ -80,4 +84,14 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   updateVideo(cfg.db, updatedVideo);
 
   return respondWithJSON(200, updatedVideo);
+}
+
+function getFileExtensionFromMimeType(mimeType: string): string {
+  const mimeToExt: { [key: string]: string } = {
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+  };
+
+  return mimeToExt[mimeType.toLowerCase()] || "jpg";
 }
