@@ -57,6 +57,11 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
     throw new BadRequestError("Thumbnail is too large");
   }
 
+  // Validate media type - only allow JPEG and PNG
+  if (thumbnail.type !== "image/jpeg" && thumbnail.type !== "image/png") {
+    throw new BadRequestError("Thumbnail must be a JPEG or PNG image");
+  }
+
   const video = getVideo(cfg.db, videoId);
   if (!video) {
     throw new NotFoundError("Video not found");
