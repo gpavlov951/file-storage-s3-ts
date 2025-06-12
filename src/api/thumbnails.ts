@@ -1,4 +1,5 @@
 import type { BunRequest } from "bun";
+import { randomBytes } from "crypto";
 import path from "path";
 import { getBearerToken, validateJWT } from "../auth";
 import type { ApiConfig } from "../config";
@@ -73,7 +74,8 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
 
   const type = thumbnail.type;
   const fileExtension = getFileExtensionFromMimeType(type);
-  const fileName = `${videoId}.${fileExtension}`;
+  const randomFileName = randomBytes(32).toString("base64url");
+  const fileName = `${randomFileName}.${fileExtension}`;
   const filePath = path.join(cfg.assetsRoot, fileName);
 
   const data = await thumbnail.arrayBuffer();
