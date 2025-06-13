@@ -4,6 +4,7 @@ import path from "path";
 import { getBearerToken, validateJWT } from "../auth";
 import { type ApiConfig } from "../config";
 import { getVideo, updateVideo, type Video } from "../db/videos";
+import { getVideoAspectRatio } from "../utils/video";
 import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
 import { respondWithJSON } from "./json";
 
@@ -59,8 +60,12 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
     await Bun.write(tempFilePath, data);
     tempFileCreated = true;
 
+    // Get the video aspect ratio
+    const aspectRatio = await getVideoAspectRatio(tempFilePath);
+
     // Put the object into S3 using S3Client.file().write()
-    const s3File = cfg.s3Client.file(fileName);
+    const s3Key = `${aspectRatio}/${fileName}`;
+    const s3File = cfg.s3Client.file(s3Key);
     const fileContents = Bun.file(tempFilePath);
 
     await s3File.write(fileContents, {
@@ -68,7 +73,7 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
     });
 
     // Update the VideoURL of the video record in the database with the S3 bucket and key
-    const videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${fileName}`;
+    const videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${s3Key}`;
 
     const updatedVideo: Video = {
       ...video,
