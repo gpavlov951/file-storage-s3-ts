@@ -64,3 +64,44 @@ export async function getVideoAspectRatio(filePath: string): Promise<string> {
     return "portrait";
   }
 }
+
+export async function processVideoForFastStart(
+  inputFilePath: string
+): Promise<string> {
+  const outputFilePath = inputFilePath + ".processed";
+
+  const process = Bun.spawn(
+    [
+      "ffmpeg",
+      "-i",
+      inputFilePath,
+      "-movflags",
+      "faststart",
+      "-map_metadata",
+      "0",
+      "-codec",
+      "copy",
+      "-f",
+      "mp4",
+      outputFilePath,
+    ],
+    {
+      stdout: "pipe",
+      stderr: "pipe",
+    }
+  );
+
+  const [stdout, stderr] = await Promise.all([
+    new Response(process.stdout).text(),
+    new Response(process.stderr).text(),
+  ]);
+
+  const { exited } = process;
+  const exitCode = await exited;
+
+  if (exitCode !== 0) {
+    throw new Error(`ffmpeg failed with exit code ${exitCode}: ${stderr}`);
+  }
+
+  return outputFilePath;
+}

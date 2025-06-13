@@ -4,7 +4,7 @@ import path from "path";
 import { getBearerToken, validateJWT } from "../auth";
 import { type ApiConfig } from "../config";
 import { getVideo, updateVideo, type Video } from "../db/videos";
-import { getVideoAspectRatio } from "../utils/video";
+import { getVideoAspectRatio, processVideoForFastStart } from "../utils/video";
 import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
 import { respondWithJSON } from "./json";
 
@@ -54,19 +54,23 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
   const tempFilePath = path.join("/tmp", fileName);
 
   let tempFileCreated = false;
+  let processedFilePath: string | null = null;
   try {
     // Save the uploaded file to a temporary file on disk
     const data = await videoFile.arrayBuffer();
     await Bun.write(tempFilePath, data);
     tempFileCreated = true;
 
-    // Get the video aspect ratio
-    const aspectRatio = await getVideoAspectRatio(tempFilePath);
+    // Process the video for fast start
+    processedFilePath = await processVideoForFastStart(tempFilePath);
 
-    // Put the object into S3 using S3Client.file().write()
+    // Get the video aspect ratio from the processed file
+    const aspectRatio = await getVideoAspectRatio(processedFilePath);
+
+    // Put the processed object into S3 using S3Client.file().write()
     const s3Key = `${aspectRatio}/${fileName}`;
     const s3File = cfg.s3Client.file(s3Key);
-    const fileContents = Bun.file(tempFilePath);
+    const fileContents = Bun.file(processedFilePath);
 
     await s3File.write(fileContents, {
       type: videoFile.type,
@@ -84,13 +88,23 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
 
     return respondWithJSON(200, updatedVideo);
   } finally {
-    // Remove the temp file when the process finishes
+    // Remove the temp files when the process finishes
     if (tempFileCreated) {
       try {
         const fs = require("fs");
         fs.unlinkSync(tempFilePath);
       } catch (error) {
-        console.error("Failed to clean up temp file:", error);
+        console.error("Failed to clean up original temp file:", error);
+      }
+    }
+
+    // Remove the processed file
+    if (processedFilePath) {
+      try {
+        const fs = require("fs");
+        fs.unlinkSync(processedFilePath);
+      } catch (error) {
+        console.error("Failed to clean up processed temp file:", error);
       }
     }
   }
