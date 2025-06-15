@@ -10,6 +10,35 @@ import { respondWithJSON } from "./json";
 
 const MAX_UPLOAD_SIZE = 1 << 30; // 1 GB
 
+/**
+ * Generate a presigned URL for an S3 object
+ */
+export function generatePresignedURL(
+  cfg: ApiConfig,
+  key: string,
+  expireTime: number
+): string {
+  const s3File = cfg.s3Client.file(key);
+  return s3File.presign({ expiresIn: expireTime });
+}
+
+/**
+ * Convert a video with a key in VideoURL to a video with a presigned URL
+ */
+export function dbVideoToSignedVideo(cfg: ApiConfig, video: Video): Video {
+  if (!video.videoURL) {
+    return video;
+  }
+
+  // Generate presigned URL with 1 hour expiration (3600 seconds)
+  const presignedURL = generatePresignedURL(cfg, video.videoURL, 3600);
+
+  return {
+    ...video,
+    videoURL: presignedURL,
+  };
+}
+
 export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
   // Extract the videoID from the URL path parameters and parse it as a UUID
   const { videoId } = req.params as { videoId?: string };
@@ -76,17 +105,16 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
       type: videoFile.type,
     });
 
-    // Update the VideoURL of the video record in the database with the S3 bucket and key
-    const videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${s3Key}`;
-
+    // Update the VideoURL of the video record in the database with the S3 key only
     const updatedVideo: Video = {
       ...video,
-      videoURL,
+      videoURL: s3Key,
     };
 
     updateVideo(cfg.db, updatedVideo);
 
-    return respondWithJSON(200, updatedVideo);
+    // Return the video with presigned URL for the response
+    return respondWithJSON(200, dbVideoToSignedVideo(cfg, updatedVideo));
   } finally {
     // Remove the temp files when the process finishes
     if (tempFileCreated) {

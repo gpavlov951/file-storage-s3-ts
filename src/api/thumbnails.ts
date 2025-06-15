@@ -6,6 +6,7 @@ import type { ApiConfig } from "../config";
 import { getVideo, updateVideo, type Video } from "../db/videos";
 import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
 import { respondWithJSON } from "./json";
+import { dbVideoToSignedVideo } from "./videos";
 
 type Thumbnail = {
   data: ArrayBuffer;
@@ -90,7 +91,7 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
 
   updateVideo(cfg.db, updatedVideo);
 
-  return respondWithJSON(200, updatedVideo);
+  return respondWithJSON(200, dbVideoToSignedVideo(cfg, updatedVideo));
 }
 
 function getFileExtensionFromMimeType(mimeType: string): string {
